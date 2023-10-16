@@ -22,9 +22,14 @@ import static org.fusesource.jansi.internal.CLibrary.isatty;
 import java.io.FilterOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
 
-import org.fusesource.jansi.AnsiOutputStream;
-import org.fusesource.jansi.WindowsAnsiOutputStream;
+import org.fusesource.jansi.AnsiColors;
+import org.fusesource.jansi.AnsiMode;
+import org.fusesource.jansi.AnsiType;
+import org.fusesource.jansi.io.AnsiOutputStream;
+import org.fusesource.jansi.io.AnsiProcessor;
+import org.fusesource.jansi.io.WindowsAnsiProcessor;
 
 /**
  * This is actually a modified copy of AnsiConsole from the jansi project.
@@ -39,21 +44,22 @@ public class AnsiUtil {
 
             // On windows we know the console does not interpret ANSI codes..
             try {
-                return new WindowsAnsiOutputStream( stream );
+                return getAnsiOutputStream(stream, new WindowsAnsiProcessor(stream, false), AnsiType.Emulation,
+                        AnsiMode.Default);
             } catch( Throwable ignore ) {
                 // this happens when JNA is not in the path.. or
                 // this happens when the stdout is being redirected to a file.
             }
 
             // Use the ANSIOutputStream to strip out the ANSI escape sequences.
-            return new AnsiOutputStream( stream );
+            return getAnsiOutputStream(stream, null, AnsiType.Emulation,AnsiMode.Default);
         }
         if( vendor.toLowerCase().contains( "android" ) ) {
             //todo is this ok?
             return new FilterOutputStream( stream ) {
                 @Override
                 public void close() throws IOException {
-                    write( AnsiOutputStream.REST_CODE );
+                    write( AnsiOutputStream.RESET_CODE );
                     flush();
                     super.close();
                 }
@@ -66,7 +72,7 @@ public class AnsiUtil {
                 // to strip the ANSI sequences..
                 int rc = isatty( STDOUT_FILENO );
                 if( rc == 0 ) {
-                    return new AnsiOutputStream( stream );
+                    return getAnsiOutputStream(stream, null,  AnsiType.Native,AnsiMode.Strip);
                 }
 
                 // These erros happen if the JNI lib is not available for your platform.
@@ -79,10 +85,25 @@ public class AnsiUtil {
         return new FilterOutputStream( stream ) {
             @Override
             public void close() throws IOException {
-                write( AnsiOutputStream.REST_CODE );
+                write( AnsiOutputStream.RESET_CODE );
                 flush();
                 super.close();
             }
         };
+    }
+
+    private static AnsiOutputStream getAnsiOutputStream(OutputStream stream, AnsiProcessor processor, AnsiType type,
+            AnsiMode mode) {
+        return new AnsiOutputStream(
+                stream,
+                null,
+                mode,
+                processor,
+                type,
+                AnsiColors.TrueColor,
+                StandardCharsets.UTF_8,
+                null,
+                null,
+                false);
     }
 }
